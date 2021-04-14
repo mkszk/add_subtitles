@@ -98,9 +98,6 @@ if __name__ == "__main__":
         
         font_object = ImageFont.truetype(font_path, font_size)
         
-        print(output_width, output_height)
-        print(subtitles)
-        
         add_subtitles_to_video(input_file, subtitled_file,
                                output_width, output_height,
                                subtitles, font_object, font_color)
