@@ -9,10 +9,10 @@ import csv
 import os
 
 
-def add_subtitle_to_image(image, text, font_object, font_color):
+def add_subtitle_to_image(image, output_x, output_y, text, font_object, font_color):
     pil = Image.fromarray(image)
     draw = ImageDraw.Draw(pil)
-    draw.text((30,30), text, font=font_object, color=font_color)
+    draw.text((output_x,output_y), text, font=font_object, color=font_color)
     return np.array(pil)
 
 
@@ -23,16 +23,50 @@ def add_subtitles_to_video(input_file, output_file,
         capture = None
         writer = None
         
+        output_x1 = output_width-output_height//2
+        output_y1 = 0
+        output_w1 = output_height//2
+        output_h1 = output_height
+        output_x2 = 0
+        output_y2 = 0
+        output_w2 = output_x1
+        output_h2 = output_height
+        output_x3 = 0
+        output_y3 = (output_height*2)//3
+        output_w3 = output_x1
+        output_h3 = output_height-output_y3
+        
+        #print(output_x1, output_y1, output_w1, output_h1)
+        #print(output_x2, output_y2, output_w2, output_h2)
+        #print(output_x3, output_y3, output_w3, output_h3)
+        
         capture = cv2.VideoCapture(input_file)
         input_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         input_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         input_fps = int(capture.get(cv2.CAP_PROP_FPS))
         num_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         
+        if input_height < input_width*2:
+            input_w1 = input_width
+            input_h1 = input_width*2
+            input_x1 = 0
+            input_y1 = (input_height-input_h1)//2
+        else:
+            input_w1 = input_width
+            input_h1 = input_height
+            input_x1 = 0
+            input_y1 = 0
+        input_w2 = input_width
+        input_h2 = (output_h2*input_w2)//output_w2
+        input_x2 = 0
+        input_y2 = input_height//2
+        
+        #print(input_x1, input_y1, input_w1, input_h1)
+        #print(input_x2, input_y2, input_w2, input_h2)
+        
         fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
         writer = cv2.VideoWriter(output_file, fourcc, input_fps, (output_width, output_height))
         
-        scale = min(output_width/input_width, output_height/input_height)
         
         for index_frames in range(num_frames):
             ret, input_frame = capture.read()
@@ -40,14 +74,28 @@ def add_subtitles_to_video(input_file, output_file,
                 break
             
             output_frame = np.zeros((output_height, output_width, 3), dtype=np.uint8)
-            resized_frame = cv2.resize(input_frame, dsize=None, fx=scale, fy=scale)
-            resized_height, resized_width = resized_frame.shape[:2]
-        
-            output_frame[-resized_height:, -resized_width:] = resized_frame
+            
+            output_frame[output_y1:output_y1+output_h1,
+                         output_x1:output_x1+output_w1] = cv2.resize(
+                                                              input_frame[input_y1:input_y1+input_h1,
+                                                                          input_x1:input_x1+input_w1],
+                                                              dsize=(output_w1,output_h1))
+            output_frame[output_y2:output_y2+output_h2,
+                         output_x2:output_x2+output_w2] = cv2.resize(
+                                                              input_frame[input_y2:input_y2+input_h2,
+                                                                          input_x2:input_x2+input_w2],
+                                                              dsize=(output_w2,output_h2))
+            output_frame[output_y3:output_y3+output_h3,
+                         output_x3:output_x3+output_w3] = cv2.blur(
+                                                              output_frame[output_y3:output_y3+output_h3,
+                                                                           output_x3:output_x3+output_w3],
+                                                              (25,25))
+                                                          
             
             lst = [text for (tim,text) in subtitles if tim <= index_frames/input_fps]
             if lst:
-                output_frame = add_subtitle_to_image(output_frame, lst[-1], font_object, font_color)
+                output_frame = add_subtitle_to_image(output_frame, output_x3, output_y3,
+                                                     lst[-1], font_object, font_color)
             writer.write(output_frame)
     finally:
         if writer is not None:
@@ -83,11 +131,7 @@ if __name__ == "__main__":
         with open(subtitles_csv) as fin:
             subtitles = []
             for row in csv.reader(fin):
-                if row[0] == "output_width":
-                    output_width = int(row[1])
-                elif row[0] == "output_height":
-                    output_height = int(row[1])
-                elif row[0] == "font_path":
+                if row[0] == "font_path":
                     font_path = row[1]
                 elif row[0] == "font_size":
                     font_size = int(row[1])
