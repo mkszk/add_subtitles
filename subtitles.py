@@ -12,33 +12,33 @@ import os
 def add_subtitle_to_image(image, output_x, output_y, text, font_object, font_color):
     pil = Image.fromarray(image)
     draw = ImageDraw.Draw(pil)
-    draw.text((output_x,output_y), text, font=font_object, color=font_color)
+    draw.text((output_x,output_y), text, font=font_object, fill=font_color)
     return np.array(pil)
 
 
-def add_subtitles_to_video(input_file, output_file,
-                           output_width, output_height,
+def add_subtitles_to_video(input_file, 
+                           bg_file, bg_offset_x, bg_offset_y, 
+                           output_file, output_width, output_height,
                            subtitles, font_object, font_color):
     try:
         capture = None
         writer = None
         
-        output_x1 = output_width-output_height//2
+        output_x1 = 0
         output_y1 = 0
         output_w1 = output_height//2
         output_h1 = output_height
         output_x2 = 0
         output_y2 = 0
-        output_w2 = output_x1
+        output_w2 = output_width
         output_h2 = output_height
-        output_x3 = 0
-        output_y3 = (output_height*2)//3
-        output_w3 = output_x1
-        output_h3 = output_height-output_y3
+        output_x3 = output_w1+bg_offset_x
+        output_y3 = bg_offset_y
+        output_w3 = output_width
+        output_h3 = output_height
         
         #print(output_x1, output_y1, output_w1, output_h1)
         #print(output_x2, output_y2, output_w2, output_h2)
-        #print(output_x3, output_y3, output_w3, output_h3)
         
         capture = cv2.VideoCapture(input_file)
         input_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -67,6 +67,7 @@ def add_subtitles_to_video(input_file, output_file,
         fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
         writer = cv2.VideoWriter(output_file, fourcc, input_fps, (output_width, output_height))
         
+        background = cv2.imread(bg_file,cv2.IMREAD_COLOR)
         
         for index_frames in range(num_frames):
             ret, input_frame = capture.read()
@@ -75,21 +76,15 @@ def add_subtitles_to_video(input_file, output_file,
             
             output_frame = np.zeros((output_height, output_width, 3), dtype=np.uint8)
             
+            output_frame[output_y2:output_y2+output_h2,
+                         output_x2:output_x2+output_w2] = cv2.resize(
+                                                              background,
+                                                              dsize=(output_w2,output_h2))
             output_frame[output_y1:output_y1+output_h1,
                          output_x1:output_x1+output_w1] = cv2.resize(
                                                               input_frame[input_y1:input_y1+input_h1,
                                                                           input_x1:input_x1+input_w1],
                                                               dsize=(output_w1,output_h1))
-            output_frame[output_y2:output_y2+output_h2,
-                         output_x2:output_x2+output_w2] = cv2.resize(
-                                                              input_frame[input_y2:input_y2+input_h2,
-                                                                          input_x2:input_x2+input_w2],
-                                                              dsize=(output_w2,output_h2))
-            output_frame[output_y3:output_y3+output_h3,
-                         output_x3:output_x3+output_w3] = cv2.blur(
-                                                              output_frame[output_y3:output_y3+output_h3,
-                                                                           output_x3:output_x3+output_w3],
-                                                              (25,25))
                                                           
             
             lst = [text for (tim,text) in subtitles if tim <= index_frames/input_fps]
@@ -122,11 +117,13 @@ if __name__ == "__main__":
         output_file = sys.argv[1]+".output.mp4"
         audio_file = sys.argv[1]+".audio.mp3"
         
+        # ‚±‚Ì•Ó‚è‚ÍŽ©•ª‚ÌŠÂ‹«‚É‡‚í‚¹‚Ä’²®‚ª•K—v
+        bg_file = '60d19a15f1ac2ed842000000.png'
         output_width = 1280
         output_height = 720
         font_path = r"C:\Windows\Fonts\meiryo.ttc"
-        font_size = 36
-        font_color = (255, 255, 255, 0)
+        font_size = 54
+        font_color = (0, 0, 0, 0)
         
         with open(subtitles_csv) as fin:
             subtitles = []
@@ -142,8 +139,9 @@ if __name__ == "__main__":
         
         font_object = ImageFont.truetype(font_path, font_size)
         
-        add_subtitles_to_video(input_file, subtitled_file,
-                               output_width, output_height,
+        add_subtitles_to_video(input_file,
+                               bg_file, 20, 130,
+                               subtitled_file, output_width, output_height,
                                subtitles, font_object, font_color)
         copy_audio(input_file, subtitled_file, output_file, audio_file)
         
