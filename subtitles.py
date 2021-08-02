@@ -9,7 +9,8 @@ import csv
 import os
 from pydub import AudioSegment
 import copy
-import subprocess
+import pyopenjtalk
+from scipy.io import wavfile
 
 
 def add_subtitle_to_image(image, output_x, output_y, text, font_object, font_color):
@@ -102,26 +103,18 @@ def add_subtitles_to_video(input_file,
             capture.release()
 
 def create_jtalk(text, limit):
-    fspeed = 1.0
+    speed = 1.0
     temp_wav = "temp.wav"
     while True:
-        open_jtalk=['open_jtalk']
-        mech=['-x','/var/lib/mecab/dic/open-jtalk/naist-jdic']
-        htsvoice=['-m','/usr/share/hts-voice/mei/mei_normal.htsvoice']
-        speed=['-r',f'{fspeed}']
-        outwav=['-ow',temp_wav]
-        cmd=open_jtalk+mech+htsvoice+speed+outwav
-        c = subprocess.Popen(cmd,stdin=subprocess.PIPE)
-        c.stdin.write(text.encode())
-        c.stdin.close()
-        c.wait()
+        x, sr = pyopenjtalk.tts(text, speed=speed)
+        wavfile.write(temp_wav, sr, x.astype(np.int16))
         voice = AudioSegment.from_wav(temp_wav)
         if os.path.exists(temp_wav):
             os.remove(temp_wav)
         if voice.duration_seconds < limit:
             return voice
         else:
-            fspeed += 0.2
+            speed += 0.2
 
 def copy_audio(input_file, subtitled_file, output_file, audio_file, subtitles):
     clip_in = mp.VideoFileClip(input_file)
