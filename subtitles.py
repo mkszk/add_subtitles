@@ -7,6 +7,9 @@ import moviepy.editor as mp
 import sys
 import csv
 import os
+from pydub import AudioSegment
+import copy
+import subprocess
 
 
 def add_subtitle_to_image(image, output_x, output_y, text, font_object, font_color):
@@ -98,14 +101,44 @@ def add_subtitles_to_video(input_file,
         if capture is not None:
             capture.release()
 
+def create_jtalk(text, limit):
+    fspeed = 1.0
+    temp_wav = "temp.wav"
+    while True:
+        open_jtalk=['open_jtalk']
+        mech=['-x','/var/lib/mecab/dic/open-jtalk/naist-jdic']
+        htsvoice=['-m','/usr/share/hts-voice/mei/mei_normal.htsvoice']
+        speed=['-r',f'{fspeed}']
+        outwav=['-ow',temp_wav]
+        cmd=open_jtalk+mech+htsvoice+speed+outwav
+        c = subprocess.Popen(cmd,stdin=subprocess.PIPE)
+        c.stdin.write(text.encode())
+        c.stdin.close()
+        c.wait()
+        voice = AudioSegment.from_wav(temp_wav)
+        if os.path.exists(temp_wav):
+            os.remove(temp_wav)
+        if voice.duration_seconds < limit:
+            return voice
+        else:
+            fspeed += 0.2
 
-def copy_audio(input_file, subtitled_file, output_file, audio_file):
+def copy_audio(input_file, subtitled_file, output_file, audio_file, subtitles):
     clip_in = mp.VideoFileClip(input_file)
     clip_in.audio.write_audiofile(audio_file)
     
+    # BGMを読み込む、ついでに音量を下げる
+    sound = AudioSegment.from_mp3(audio_file) - 10
+    
+    subtitles = copy.deepcopy(subtitles)
+    subtitles.append((sound.duration_seconds, ""))
+    for ((start,text),(end,_)) in zip(subtitles[:-1],subtitles[1:]):
+        voice = create_jtalk(text.replace("\n", ""), end-start)
+        sound = sound.overlay(voice, int(start*1000))
+    sound.export(audio_file, format="mp3") 
+    
     clip_out = mp.VideoFileClip(subtitled_file)
     clip_out.write_videofile(output_file, audio=audio_file)
-    
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -117,7 +150,7 @@ if __name__ == "__main__":
         output_file = sys.argv[1]+".output.mp4"
         audio_file = sys.argv[1]+".audio.mp3"
         
-        # ���̕ӂ�͎����̊��ɍ��킹�Ē������K�v
+        # この辺りは自分の環境に合わせて調整が必要
         bg_file = '60d19a15f1ac2ed842000000.png'
         output_width = 1280
         output_height = 720
@@ -125,7 +158,7 @@ if __name__ == "__main__":
         font_size = 54
         font_color = (0, 0, 0, 0)
         
-        with open(subtitles_csv) as fin:
+        with open(subtitles_csv, encoding="utf_8") as fin:
             subtitles = []
             for row in csv.reader(fin):
                 if row[0] == "font_path":
@@ -137,13 +170,16 @@ if __name__ == "__main__":
                 else:
                     subtitles.append([float(row[0]), row[1]])
         
-        font_object = ImageFont.truetype(font_path, font_size)
+        try:
+            font_object = ImageFont.truetype(font_path, font_size)
+        except:
+            font_object = ImageFont.truetype("/usr/share/fonts/truetype/takao-mincho/TakaoPMincho.ttf", font_size)
         
         add_subtitles_to_video(input_file,
                                bg_file, 20, 130,
                                subtitled_file, output_width, output_height,
                                subtitles, font_object, font_color)
-        copy_audio(input_file, subtitled_file, output_file, audio_file)
+        copy_audio(input_file, subtitled_file, output_file, audio_file, subtitles)
         
         if os.path.exists(subtitled_file):
             os.remove(subtitled_file)
