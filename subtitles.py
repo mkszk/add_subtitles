@@ -9,8 +9,6 @@ import csv
 import os
 from pydub import AudioSegment
 import copy
-import pyopenjtalk
-from scipy.io import wavfile
 
 
 def add_subtitle_to_image(image, output_x, output_y, text, font_object, font_color):
@@ -106,8 +104,32 @@ def create_jtalk(text, limit):
     speed = 1.0
     temp_wav = "temp.wav"
     while True:
-        x, sr = pyopenjtalk.tts(text, speed=speed)
-        wavfile.write(temp_wav, sr, x.astype(np.int16))
+        try:
+            # pyopenjtalkを使えるなら実行
+            import pyopenjtalk
+            from scipy.io import wavfile
+            x, sr = pyopenjtalk.tts(text, speed=speed)
+            wavfile.write(temp_wav, sr, x.astype(np.int16))
+        except:
+            # VOICEVOXを使えるなら実行
+            import requests
+            import urllib.parse
+            import json
+            quoted = urllib.parse.quote(text)
+            headers = {
+                "accept": "audio/wav",
+                "Content-Type": "application/json",
+            }
+            audio_query = requests.post("http://localhost:50021/"+
+                f"audio_query?speaker=0&text={quoted}")
+            audio_json = json.loads(audio_query.content)
+            audio_json["speedScale"] = speed
+            audio_data = requests.post("http://localhost:50021/"+
+                "synthesis?speaker=0",
+                data=json.dumps(audio_json),
+                headers=headers)
+            with open(temp_wav, "wb") as f:
+                f.write(audio_data.content)
         voice = AudioSegment.from_wav(temp_wav)
         if os.path.exists(temp_wav):
             os.remove(temp_wav)
