@@ -1,1 +1,1 @@
-This software is released under the MIT License, see LICENSE.txt.
+see https://github.com/mkszk/Thala
